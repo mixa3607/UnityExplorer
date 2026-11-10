@@ -177,7 +177,7 @@ namespace UnityExplorer.MCP.Runtime
 
         private static string Instructions()
         {
-            return "Use search_objects to obtain stable object handles, inspect with get_object, then mutate with set_member or invoke_method. Prefer execute_batch for related operations.";
+            return "Use search_objects to obtain stable object handles, inspect with get_object, mutate with set_member, invoke_method, or execute arbitrary C# with execute_csharp. Prefer execute_batch for related operations.";
         }
 
         private static Dictionary<string, string[]> BuildRequiredArguments()
@@ -198,6 +198,7 @@ namespace UnityExplorer.MCP.Runtime
             map["destroy_object"] = new[] { "object_id" };
             map["invoke_method"] = new[] { "method" };
             map["execute_batch"] = new[] { "operations" };
+            map["execute_csharp"] = new[] { "code" };
             return map;
         }
 
@@ -222,6 +223,7 @@ namespace UnityExplorer.MCP.Runtime
             AddTool(result, "destroy_object", "Destroy a game object", "Destroy a UnityEngine.Object by stable handle.", SchemaRequired(new[] { "object_id" }, Prop("object_id", Id()), Prop("immediate", Boolean())), false, true, false);
             AddTool(result, "invoke_method", "Invoke an object method", "Invoke an instance or static method with JSON arguments converted to CLR values. overload selects a specific overload by signature or parameter type list; generic_type_arguments supplies type arguments to close a generic method.", SchemaRequired(new[] { "method" }, Prop("object_id", Id()), Prop("type", String()), Prop("method", String()), Prop("arguments", ArrayOf(McpJsonValue.Object())), Prop("generic_type_arguments", ArrayOf(String())), Prop("overload", String())), false, true, false);
             AddTool(result, "execute_batch", "Execute a bridge batch", "Execute multiple non-batch bridge operations in order.", SchemaRequired(new[] { "operations" }, Prop("operations", ArrayOf(McpJsonValue.Object())), Prop("atomic", Boolean()), Prop("stop_on_error", Boolean())), false, true, false);
+            AddTool(result, "execute_csharp", "Execute arbitrary C# code", "Compile and execute arbitrary C# code in the running Unity game context via the C# Console REPL. Interactive helpers like Log(obj), Inspect(obj), CurrentTarget, AllTargets are available.", SchemaRequired(new[] { "code" }, Prop("code", String())), false, true, false);
             return result;
         }
 

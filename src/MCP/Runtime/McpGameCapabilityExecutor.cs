@@ -11,7 +11,7 @@ namespace UnityExplorer.MCP.Runtime
     /// <summary>Main-thread Unity game capability executor.</summary>
     public sealed partial class McpGameCapabilityExecutor : IMcpRequestHandler
     {
-        private static readonly string[] RoutedMethods = { "game.execute", "game.status", "game.list_scenes", "game.search", "game.snapshot", "game.get_member", "game.list_methods", "game.set_member", "game.set_transform", "game.invoke", "game.set_enabled", "game.create", "game.destroy", "game.batch", "get_status", "list_scenes", "search_objects", "get_object", "get_member", "list_methods", "set_member", "set_transform", "invoke_method", "set_enabled", "create_object", "destroy_object", "execute_batch" };
+        private static readonly string[] RoutedMethods = { "game.execute", "game.status", "game.list_scenes", "game.search", "game.snapshot", "game.get_member", "game.list_methods", "game.set_member", "game.set_transform", "game.invoke", "game.set_enabled", "game.create", "game.destroy", "game.batch", "game.execute_csharp", "get_status", "list_scenes", "search_objects", "get_object", "get_member", "list_methods", "set_member", "set_transform", "invoke_method", "set_enabled", "create_object", "destroy_object", "execute_batch", "execute_csharp" };
         private readonly McpObjectRegistry registry;
         private readonly McpGameExecutorOptions options;
         private readonly McpValueCodec codec;
@@ -72,6 +72,7 @@ namespace UnityExplorer.MCP.Runtime
                     case "invoke": result = Invoke(command); break;
                     case "set_enabled": result = SetEnabled(command); break; case "create": result = Create(command); break;
                     case "destroy": result = Destroy(command); break; case "batch": result = Batch(command, batchDepth); break;
+                    case "execute_csharp": result = ExecuteCSharp(command); break;
                     default: return Failure("unknown_command", "Unsupported command: " + name);
                 }
                 return Success(name, result);
@@ -92,7 +93,7 @@ namespace UnityExplorer.MCP.Runtime
 #else
             r.ObjectValue["runtime"] = McpJsonValue.From("Mono");
 #endif
-            r.ObjectValue["capabilities"] = McpJsonValue.FromObject(new string[] { "scenes", "search", "snapshot", "fields", "properties", "transform", "methods", "enable", "create", "destroy", "batch" }); return r;
+            r.ObjectValue["capabilities"] = McpJsonValue.FromObject(new string[] { "scenes", "search", "snapshot", "fields", "properties", "transform", "methods", "enable", "create", "destroy", "batch", "csharp" }); return r;
         }
         private McpJsonValue Batch(McpJsonValue command, int depth)
         {
@@ -239,6 +240,9 @@ namespace UnityExplorer.MCP.Runtime
                 case "create_object": return "create";
                 case "destroy_object": return "destroy";
                 case "execute_batch": return "batch";
+                case "execute_csharp": return "execute_csharp";
+                case "eval_csharp": return "execute_csharp";
+                case "eval": return "execute_csharp";
                 default: return method.StartsWith("game.", StringComparison.Ordinal) ? method.Substring(5) : method;
             }
         }
@@ -267,6 +271,9 @@ namespace UnityExplorer.MCP.Runtime
             CopyAlias(copy, "include_inactive", "includeInactive"); CopyAlias(copy, "kind", "kind");
             CopyAlias(copy, "include_unloaded", "includeUnloaded"); CopyAlias(copy, "include_special", "includeSpecial");
             CopyAlias(copy, "world_position_stays", "worldPositionStays");
+            CopyAlias(copy, "script", "code");
+            CopyAlias(copy, "csharp", "code");
+            CopyAlias(copy, "expression", "code");
             CopyAlias(copy, "local_position", "localPosition"); CopyAlias(copy, "local_rotation", "localRotation");
             CopyAlias(copy, "euler_angles", "eulerAngles"); CopyAlias(copy, "local_euler_angles", "localEulerAngles");
             CopyAlias(copy, "local_scale", "localScale");
@@ -281,10 +288,10 @@ namespace UnityExplorer.MCP.Runtime
 
         private static void EnforcePolicy(string command)
         {
-            bool write = command == "set_member" || command == "set_transform" || command == "set_enabled" || command == "invoke" || command == "create" || command == "destroy";
+            bool write = command == "set_member" || command == "set_transform" || command == "set_enabled" || command == "invoke" || command == "create" || command == "destroy" || command == "execute_csharp";
             if (write && ConfigManager.MCP_Read_Only != null && ConfigManager.MCP_Read_Only.Value)
                 throw new McpCommandException("read_only", "MCP is in read-only mode; mutation command blocked: " + command);
-            bool dangerous = command == "invoke" || command == "create" || command == "destroy";
+            bool dangerous = command == "invoke" || command == "create" || command == "destroy" || command == "execute_csharp";
             if (dangerous && (ConfigManager.MCP_Allow_Dangerous_Operations == null || !ConfigManager.MCP_Allow_Dangerous_Operations.Value))
                 throw new McpCommandException("dangerous_operations_disabled", "Dangerous MCP operations are disabled: " + command);
         }

@@ -134,6 +134,72 @@ public class ConsoleController
     public static void Update()
         => _instance?.UpdateImp();
 
+    public static object? EvaluateCode(string input, out string compilerOutput)
+    {
+        if (_instance == null)
+        {
+            try
+            {
+                Init();
+            }
+            catch (Exception ex)
+            {
+                compilerOutput = "Failed to initialize C# Console: " + ex.Message;
+                throw new InvalidOperationException(compilerOutput, ex);
+            }
+        }
+
+        if (_instance == null || _instance.sreNotSupported)
+        {
+            compilerOutput = "C# evaluator / SRE is not supported in this runtime environment.";
+            throw new NotSupportedException(compilerOutput);
+        }
+
+        return _instance.EvaluateCodeInternal(input, out compilerOutput);
+    }
+
+    private object? EvaluateCodeInternal(string input, out string compilerOutput)
+    {
+        _evaluator.Initialize();
+        _evaluator.ClearOutput();
+
+        CompiledMethod? repl;
+        try
+        {
+            repl = _evaluator.Compile(input);
+        }
+        catch (FormatException fex)
+        {
+            compilerOutput = _evaluator.ToString() ?? "";
+            if (string.IsNullOrEmpty(compilerOutput))
+                compilerOutput = fex.Message;
+            throw new FormatException(compilerOutput, fex);
+        }
+        catch (Exception ex)
+        {
+            compilerOutput = _evaluator.ToString() ?? "";
+            if (string.IsNullOrEmpty(compilerOutput))
+                compilerOutput = ex.Message;
+            throw;
+        }
+
+        compilerOutput = _evaluator.ToString() ?? "";
+
+        if (repl != null)
+        {
+            object? ret = null;
+            repl.Invoke(ref ret);
+            return ret;
+        }
+
+        if (!string.IsNullOrEmpty(compilerOutput) && compilerOutput.Contains("error CS"))
+        {
+            throw new FormatException(compilerOutput.Trim());
+        }
+
+        return null;
+    }
+
     #region Evaluating
 
     public void ResetConsole() => ResetConsole(true);

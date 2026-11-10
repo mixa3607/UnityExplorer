@@ -242,13 +242,28 @@ Batches are **ordered and non-atomic**: completed operations are not rolled
 back. Each sub-operation is permission-checked individually, so a batch cannot
 bypass read-only mode.
 
+### 2.14 `execute_csharp`
+
+`code` **required**: C# code snippet to compile and execute via the in-game C#
+Console REPL (`Mono.CSharp.Evaluator`).
+
+Returns:
+- `returnValue`: Serialized result of the evaluated expression (or null).
+- `compilerOutput`: Warnings or informational compiler messages if any.
+- `success`: `true` on successful execution.
+
+Errors:
+- `evaluation_failed`: Compilation error (e.g. syntax, undefined variables) or
+  uncaught runtime exception.
+- `disabled`: Dangerous operations policy is off.
+
 ## 3. Permission model
 
 | Operation | Read-only on | Read-only off, dangerous off | Both off |
 |---|---:|---:|---:|
 | `get_status`, `list_scenes`, `search_objects`, `get_object`, `get_member`, `list_methods` | Allowed | Allowed | Allowed |
 | `set_member`, `set_transform`, `set_enabled` | Denied | Allowed | Allowed |
-| `invoke_method`, `create_object`, `destroy_object` | Denied | Denied | Allowed |
+| `invoke_method`, `execute_csharp`, `create_object`, `destroy_object` | Denied | Denied | Allowed |
 | `execute_batch` | Per sub-operation | Per sub-operation | Per sub-operation |
 
 Enforcement is in the executor, not the schema. `MCP Allow Dangerous

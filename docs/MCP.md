@@ -130,11 +130,12 @@ The current tool set:
 | `set_transform` | Set position, rotation, scale, or parent | Write; requires read-only off |
 | `set_enabled` | Enable or disable a GameObject or a component exposing `enabled` | Write; requires read-only off |
 | `invoke_method` | Invoke an instance or static method with converted arguments | Dangerous; requires read-only off **and** dangerous operations on |
+| `execute_csharp` | Compile and execute arbitrary C# code via the in-game C# REPL | Dangerous; requires read-only off **and** dangerous operations on |
 | `create_object` | Create a GameObject, primitive, or add components | Dangerous; requires read-only off **and** dangerous operations on |
 | `destroy_object` | Destroy an object, optionally immediately | Dangerous; requires read-only off **and** dangerous operations on |
 | `execute_batch` | Run multiple operations in sequence, each independently permission-checked | Depends on the most dangerous sub-operation |
 
-Required arguments per tool: `get_status`, `list_scenes`, `search_objects`, `get_object`, `list_methods`, and `create_object` take none; `get_member` requires `member_path`; `set_member` requires `member_path` and `value`; `set_transform` and `destroy_object` require `object_id`; `set_enabled` requires `object_id` and `enabled`; `invoke_method` requires `method`; `execute_batch` requires `operations`.
+Required arguments per tool: `get_status`, `list_scenes`, `search_objects`, `get_object`, `list_methods`, and `create_object` take none; `get_member` requires `member_path`; `set_member` requires `member_path` and `value`; `set_transform` and `destroy_object` require `object_id`; `set_enabled` requires `object_id` and `enabled`; `invoke_method` requires `method`; `execute_csharp` requires `code`; `execute_batch` requires `operations`.
 
 The object-addressed tools (`get_object`, `get_member`, `list_methods`, `set_member`, `invoke_method`) accept **either** `object_id` for an instance **or** `type` for a static view of a class, matching the Inspector's `[S]` tab. A type-only call lists static members only.
 
@@ -146,7 +147,7 @@ For the full parameter list of each tool, including response fields and error co
 |---|---:|---:|---:|
 | Status, scenes, search, object/member reads | Allowed | Allowed | Allowed |
 | Field/property, Transform, enabled writes | Denied | Allowed | Allowed |
-| Method invocation, create, destroy | Denied | Denied | Allowed |
+| Method invocation, execute C#, create, destroy | Denied | Denied | Allowed |
 | Batch | Only if every sub-operation is read-only | Read-only and normal writes | All allowed, still checked individually |
 
 MCP annotations are hints for the agent; the real permission check is enforced inside the runtime. Adding a tool to a client allowlist, disabling client-side approval, or wrapping a call in `execute_batch` cannot bypass `MCP_Read_Only` or `MCP_Allow_Dangerous_Operations`.
