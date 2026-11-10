@@ -233,7 +233,7 @@ namespace UnityExplorer.Config
                 true);
 
             MCP_Allow_Dangerous_Operations = new("MCP Allow Dangerous Operations",
-                "Allow high-risk tools such as object destruction, arbitrary invocation, and scene changes. Reset to false on every startup.",
+                "Allow high-risk tools such as object destruction, arbitrary invocation, and code execution.",
                 false);
 
             MCP_Request_Logging = new("MCP Request Logging",

@@ -202,7 +202,7 @@ Two levels are used:
 - **Writes allowed**: schema-validated simple field/property and Transform changes that are usually recoverable.
 - **Dangerous allowed**: method invocation, object/component destruction, arbitrary type instantiation, static member writes, and anything affecting global game state.
 
-The dangerous switch defaults to off and is **reset to off on every startup**, so authorization never survives a restart. The panel shows the current state. Client-side approval does not imply the user consented to a specific operation; agents should still explain the target, the impact, and how to revert, and ask for confirmation.
+The dangerous switch defaults to off. It can be persisted in configuration or forced at startup via the `--mcp-dangerous` command-line argument. The panel shows the current state. Client-side approval does not imply the user consented to a specific operation; agents should still explain the target, the impact, and how to revert, and ask for confirmation.
 
 ## 6. Runtime limitations
 
