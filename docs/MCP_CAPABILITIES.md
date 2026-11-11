@@ -244,8 +244,10 @@ bypass read-only mode.
 
 ### 2.14 `execute_csharp`
 
-`code` **required**: C# code snippet to compile and execute via the in-game C#
-Console REPL (`Mono.CSharp.Evaluator`).
+`code` **or** `file` required: C# code to compile and execute via the in-game C#
+Console REPL (`Mono.CSharp.Evaluator`). `file` may be absolute, or relative to
+the game root, the current directory, or the UnityExplorer `Scripts` folder; the
+resolved path is returned as `sourceFile`.
 
 `fresh` optional: when `true`, the REPL is recreated before compiling. This drops
 previously defined variables and classes and re-applies the default `using`
@@ -258,13 +260,15 @@ error (`CS0127`). Put the value in the last expression instead, e.g.
 Returns:
 - `returnValue`: Serialized result of the evaluated expression (or null).
 - `compilerOutput`: Warnings or informational compiler messages if any.
+- `sourceFile`: Resolved absolute path when `file` was used.
 - `success`: `true` on successful execution.
 
 Errors:
 - `evaluation_failed`: Compilation error (e.g. syntax, undefined variables) or
-  uncaught runtime exception. The message includes the inner-exception chain;
-  `CS0584` (internal compiler error on IL2CPP metadata) is automatically retried
-  once with a fresh evaluator and, if that fails, with a reduced reference set.
+  uncaught runtime exception. The message includes the inner-exception chain.
+  `CS0584` (internal compiler error on IL2CPP metadata) is recovered by
+  blacklisting the members Mono.CSharp cannot import and retrying.
+- `file_not_found`: the `file` path could not be resolved or read.
 - `disabled`: Dangerous operations policy is off.
 
 ## 3. Permission model
