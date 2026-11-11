@@ -40,6 +40,7 @@ public class ConsoleController
     static readonly string[] DefaultUsing = [
 
         "System",
+        "System.IO",
         "System.Linq",
         "System.Text",
         "System.Collections",
@@ -158,9 +159,63 @@ public class ConsoleController
         return _instance.EvaluateCodeInternal(input, out compilerOutput);
     }
 
+    private const int MaxCompilerRecoveryAttempts = 8;
+
+    private static readonly string[] PrewarmBlacklistTypes =
+    {
+        "UnityEngine.Object",
+        "UnityEngine.GameObject",
+        "UnityEngine.Component",
+        "UnityEngine.Behaviour",
+        "UnityEngine.MonoBehaviour",
+        "UnityEngine.Transform",
+        "UnityEngine.RectTransform",
+        "UnityEngine.Camera",
+        "UnityEngine.Canvas",
+        "UnityEngine.CanvasRenderer",
+        "UnityEngine.Mesh",
+        "UnityEngine.Material",
+        "UnityEngine.Texture",
+        "UnityEngine.Texture2D",
+        "UnityEngine.Sprite",
+        "UnityEngine.UI.Button",
+        "UnityEngine.UI.Image",
+        "UnityEngine.UI.Text",
+        "TMPro.TextMeshProUGUI",
+    };
+
+    private static bool _prewarmedBlacklist;
+
     private object? EvaluateCodeInternal(string input, out string compilerOutput)
     {
+        PrewarmBlacklist();
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return EvaluateCodeOnce(input, out compilerOutput);
+            }
+            catch (FormatException ex) when (IsInternalCompilerError(ex.Message))
+            {
+                string? typeName = ExtractUnloadableTypeName(ex.Message);
+                int blacklisted = typeName != null ? BlacklistUnloadableMembers(typeName) : 0;
+
+                // Give transient states one retry even when the culprit cannot be named.
+                if (attempt >= MaxCompilerRecoveryAttempts || (blacklisted == 0 && attempt > 0))
+                    throw;
+
+                ExplorerCore.LogWarning(
+                    $"[CSConsole] {FirstLine(ex.Message)} | type={typeName ?? "?"} blacklisted={blacklisted}; resetting evaluator.");
+
+                RecreateEvaluator();
+            }
+        }
+    }
+
+    private object? EvaluateCodeOnce(string input, out string compilerOutput)
+    {
         _evaluator.Initialize();
+        _evaluator.FlushPendingReferences();
         _evaluator.ClearOutput();
 
         CompiledMethod? repl;
@@ -198,6 +253,200 @@ public class ConsoleController
         }
 
         return null;
+    }
+
+    private static bool IsInternalCompilerError(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return false;
+
+        return message.Contains("CS0584")
+            || message.Contains("Internal compiler error")
+            || message.Contains("Collection was modified");
+    }
+
+    private static string FirstLine(string text)
+    {
+        int newline = text.IndexOf('\n');
+        return newline < 0 ? text : text.Substring(0, newline).Trim();
+    }
+
+    /// <summary>
+    /// Extracts the type name from "Unexpected error when loading type `Foo.Bar'".
+    /// </summary>
+    private static string? ExtractUnloadableTypeName(string message)
+    {
+        const string marker = "Unexpected error when loading type `";
+        int start = message.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+            return null;
+
+        start += marker.Length;
+        int end = message.IndexOf('\'', start);
+        return end < 0 ? null : message.Substring(start, end - start);
+    }
+
+    private static void PrewarmBlacklist()
+    {
+        if (_prewarmedBlacklist)
+            return;
+
+        _prewarmedBlacklist = true;
+        foreach (string typeName in PrewarmBlacklistTypes)
+        {
+            try
+            {
+                BlacklistUnloadableMembers(typeName);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// IL2CPP interop assemblies expose members that the Mono.CSharp importer cannot load on
+    /// CoreCLR: signatures using ReadOnlySpan/Span (not present in the mscorlib facade) and
+    /// optional parameters whose default value is System.Reflection.Missing. Mono.CSharp imports
+    /// every member of a type eagerly, so one such member makes the whole type unusable (CS0584).
+    /// Add those members to mcs' own signature blacklist so the rest of the type stays usable.
+    /// </summary>
+    private static int BlacklistUnloadableMembers(string typeName)
+    {
+        Type? type = ResolveType(typeName);
+        if (type == null)
+            return 0;
+
+        HashSet<string>? blacklist = Mono.CSharp.IL2CPP.Blacklist.SignatureBlacklist;
+        if (blacklist == null)
+            return 0;
+
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+        MemberInfo[] members;
+        try
+        {
+            members = type.GetMembers(flags);
+        }
+        catch
+        {
+            return 0;
+        }
+
+        int added = 0;
+        foreach (MemberInfo member in members)
+        {
+            if (!IsMemberUnloadable(member))
+                continue;
+
+            string key = $"{type.Namespace}.{type.Name}.{member.Name}";
+            if (blacklist.Add(key))
+                added++;
+        }
+
+        return added;
+    }
+
+    private static Type? ResolveType(string typeName)
+    {
+        Type? type = Type.GetType(typeName, throwOnError: false);
+        if (type != null)
+            return type;
+
+        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                type = assembly.GetType(typeName, throwOnError: false);
+                if (type != null)
+                    return type;
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsMemberUnloadable(MemberInfo member)
+    {
+        try
+        {
+            if (member is MethodBase method)
+            {
+                foreach (ParameterInfo parameter in method.GetParameters())
+                {
+                    _ = parameter.ParameterType;
+
+                    if (parameter.IsOptional
+                        && (parameter.Attributes & ParameterAttributes.HasDefault) != 0
+                        && parameter.RawDefaultValue is Missing)
+                    {
+                        return true;
+                    }
+                }
+
+                if (method is MethodInfo methodInfo)
+                    _ = methodInfo.ReturnType;
+            }
+            else if (member is FieldInfo field)
+            {
+                _ = field.FieldType;
+
+                if (field.IsLiteral && field.GetRawConstantValue() is Missing)
+                    return true;
+            }
+            else if (member is PropertyInfo property)
+            {
+                _ = property.PropertyType;
+                foreach (ParameterInfo parameter in property.GetIndexParameters())
+                    _ = parameter.ParameterType;
+            }
+            else if (member is EventInfo evt)
+            {
+                _ = evt.EventHandlerType;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private void RecreateEvaluator()
+    {
+        _evaluator.Recreate();
+        ApplyDefaultUsings();
+    }
+
+    private void ApplyDefaultUsings()
+    {
+        _evaluator.Initialize();
+        IEnumerable<string> names = usingDirectives.Count > 0 ? usingDirectives : DefaultUsing;
+        foreach (string assemblyName in names)
+        {
+            try
+            {
+                _evaluator.Compile($"using {assemblyName};");
+            }
+            catch
+            {
+                // A missing namespace is not fatal; the snippet may not need it.
+            }
+        }
+    }
+
+    /// <summary>Drops all REPL state (variables/classes) but keeps the evaluator usable.</summary>
+    public static void RecreateMcpEvaluator()
+    {
+        if (_instance == null)
+            return;
+
+        _instance.RecreateEvaluator();
     }
 
     #region Evaluating

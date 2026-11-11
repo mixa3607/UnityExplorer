@@ -24,6 +24,9 @@ public sealed class ConsoleScriptEvaluator
     public CompiledMethod? Compile(string text)
         => _evaluator?.Compile(text);
 
+    public void FlushPendingReferences()
+        => _evaluator?.FlushPendingReferences();
+
     public void Initialize()
     {
         if (_evaluator is null)

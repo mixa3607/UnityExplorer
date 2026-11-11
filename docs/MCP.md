@@ -264,6 +264,7 @@ The HTTP parser requires a `Content-Length` header and **rejects chunked request
 | `Method not found` / a tool disappeared | Call `tools/list` again; confirm the current build, scene, runtime, and security mode support it. |
 | Object not found / stale handle | The object was destroyed or the scene changed. Re-search and confirm by scene, hierarchy path, and type. |
 | Works on Mono, fails on IL2CPP | The type may be stripped, the wrapper ungenerated, or the argument unmarshallable. Fall back to simpler field/component APIs. |
+| `execute_csharp` reports `CS0584` once, then succeeds | Expected: the importer hit an IL2CPP member it cannot load (`ReadOnlySpan` signature or `Missing` default). The executor blacklists that member, resets the REPL, and retries automatically. See `compilerOutput` and the `[CSConsole]` lines in `LogOutput.log`. |
 | Game stutters | Reduce enumeration scope, depth, and per-frame request count; avoid getters, `ToString()`, and large texture/mesh serialization. |
 | Client reports a protocol parse error | Confirm the client transport matches the panel, restart the server, and check the response `Content-Type`, URL, token, and protocol version. |
 | Read-only mode still rejects a getter | Expected conservative behavior; getters can have side effects. Use only capabilities explicitly marked read-only. |

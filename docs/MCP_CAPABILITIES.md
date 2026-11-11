@@ -247,6 +247,14 @@ bypass read-only mode.
 `code` **required**: C# code snippet to compile and execute via the in-game C#
 Console REPL (`Mono.CSharp.Evaluator`).
 
+`fresh` optional: when `true`, the REPL is recreated before compiling. This drops
+previously defined variables and classes and re-applies the default `using`
+directives; use it after a compiler crash or when a snippet redeclares a name.
+
+The REPL body is compiled as `void`: a `return value;` statement is a compile
+error (`CS0127`). Put the value in the last expression instead, e.g.
+`var x = 5; x * 2`.
+
 Returns:
 - `returnValue`: Serialized result of the evaluated expression (or null).
 - `compilerOutput`: Warnings or informational compiler messages if any.
@@ -254,7 +262,9 @@ Returns:
 
 Errors:
 - `evaluation_failed`: Compilation error (e.g. syntax, undefined variables) or
-  uncaught runtime exception.
+  uncaught runtime exception. The message includes the inner-exception chain;
+  `CS0584` (internal compiler error on IL2CPP metadata) is automatically retried
+  once with a fresh evaluator and, if that fails, with a reduced reference set.
 - `disabled`: Dangerous operations policy is off.
 
 ## 3. Permission model
