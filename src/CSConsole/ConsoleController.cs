@@ -188,12 +188,28 @@ public class ConsoleController
 
     private object? EvaluateCodeInternal(string input, out string compilerOutput)
     {
+        string output = string.Empty;
+        object? value = ExecuteWithRecovery(() => EvaluateCodeOnce(input, out output));
+        compilerOutput = output;
+        return value;
+    }
+
+    /// <summary>
+    /// Runs a compile action and recovers from Mono.CSharp internal errors. Shared by the MCP
+    /// executor and the in-game C# Console so both behave the same way.
+    /// </summary>
+    private T ExecuteWithRecovery<T>(Func<T> compile)
+    {
         PrewarmBlacklist();
+
         for (int attempt = 0; ; attempt++)
         {
+            _evaluator.Initialize();
+            _evaluator.FlushPendingReferences();
+
             try
             {
-                return EvaluateCodeOnce(input, out compilerOutput);
+                return compile();
             }
             catch (FormatException ex) when (IsInternalCompilerError(ex.Message))
             {
@@ -204,8 +220,11 @@ public class ConsoleController
                 if (attempt >= MaxCompilerRecoveryAttempts || (blacklisted == 0 && attempt > 0))
                     throw;
 
-                ExplorerCore.LogWarning(
-                    $"[CSConsole] {FirstLine(ex.Message)} | type={typeName ?? "?"} blacklisted={blacklisted}; resetting evaluator.");
+                string detail = typeName != null
+                    ? $"type={typeName} blacklisted={blacklisted}"
+                    : FirstLine(ex.Message);
+
+                ExplorerCore.LogWarning($"[CSConsole] Internal compiler error ({detail}); resetting evaluator.");
 
                 RecreateEvaluator();
             }
@@ -214,8 +233,6 @@ public class ConsoleController
 
     private object? EvaluateCodeOnce(string input, out string compilerOutput)
     {
-        _evaluator.Initialize();
-        _evaluator.FlushPendingReferences();
         _evaluator.ClearOutput();
 
         CompiledMethod? repl;
@@ -502,11 +519,13 @@ public class ConsoleController
         if (sreNotSupported)
             return;
 
-        _evaluator.Initialize();
-
         try
         {
-            Compile(input, supressLog);
+            ExecuteWithRecovery(() =>
+            {
+                Compile(input, supressLog);
+                return true;
+            });
         }
         catch (FormatException fex)
         {
